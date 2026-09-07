@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Bar — build console</title>
+<style>
+:root{
+  --paper:#E9EDEF;--panel:#F8FAFB;--panel2:#F1F4F5;--ink:#0F1518;--ink-2:#3C4950;--mute:#6C7A81;
+  --rule:#C4CED3;--rule-soft:#DDE4E7;--brass:#8F6420;--brass-bg:#F1E5CB;
+  --ok:#2F6B45;--ok-bg:#DDEDE2;--warn:#8A5A16;--warn-bg:#F6E7CC;--bad:#93372A;--bad-bg:#F5DCD6;
+  --stage-a:#DFE5E8;--stage-b:#C7D1D6;
+}
+@media (prefers-color-scheme:dark){:root{
+  --paper:#0B0F11;--panel:#141A1D;--panel2:#101619;--ink:#E3EAEC;--ink-2:#AFBBC1;--mute:#7A888F;
+  --rule:#273135;--rule-soft:#1C2226;--brass:#D4A65E;--brass-bg:#2B2311;
+  --ok:#7FB58F;--ok-bg:#16261C;--warn:#D9A75A;--warn-bg:#2A2110;--bad:#DE8875;--bad-bg:#2C1713;
+  --stage-a:#161D21;--stage-b:#0C1114;}}
+:root[data-theme="light"]{--paper:#E9EDEF;--panel:#F8FAFB;--panel2:#F1F4F5;--ink:#0F1518;--ink-2:#3C4950;
+  --mute:#6C7A81;--rule:#C4CED3;--rule-soft:#DDE4E7;--brass:#8F6420;--brass-bg:#F1E5CB;
+  --ok:#2F6B45;--ok-bg:#DDEDE2;--warn:#8A5A16;--warn-bg:#F6E7CC;--bad:#93372A;--bad-bg:#F5DCD6;
+  --stage-a:#DFE5E8;--stage-b:#C7D1D6;}
+:root[data-theme="dark"]{--paper:#0B0F11;--panel:#141A1D;--panel2:#101619;--ink:#E3EAEC;--ink-2:#AFBBC1;
+  --mute:#7A888F;--rule:#273135;--rule-soft:#1C2226;--brass:#D4A65E;--brass-bg:#2B2311;
+  --ok:#7FB58F;--ok-bg:#16261C;--warn:#D9A75A;--warn-bg:#2A2110;--bad:#DE8875;--bad-bg:#2C1713;
+  --stage-a:#161D21;--stage-b:#0C1114;}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;font-size:15px;line-height:1.55;
+  -webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:1180px;margin:0 auto;padding:26px 20px 90px}
+a{color:var(--brass)}
+
+header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;
+  border-bottom:2px solid var(--ink);padding-bottom:14px}
+h1{font-size:clamp(26px,4vw,38px);line-height:1;letter-spacing:-.03em;margin:0}
+.sub{font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--brass);margin:0 0 8px}
+.locked{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--mute);text-align:right}
+
+nav{display:flex;gap:2px;margin:20px 0 0;flex-wrap:wrap}
+nav button{font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;padding:9px 15px;border:1px solid var(--rule);background:var(--panel);
+  color:var(--mute);cursor:pointer;border-radius:2px}
+nav button:hover{color:var(--brass);border-color:var(--brass)}
+nav button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+nav button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+section.tab{display:none;margin-top:26px}
+section.tab.on{display:block}
+
+h2{font-size:13px;font-family:ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;
+  margin:32px 0 0;padding-bottom:8px;border-bottom:1px solid var(--rule)}
+h2:first-child{margin-top:0}
+p{max-width:66ch;color:var(--ink-2)}
+
+.grid{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);margin:18px 0}
+.g4{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.cell{background:var(--panel);padding:13px 15px}
+.cell dt{font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--mute);margin-bottom:5px}
+.cell dd{margin:0;font-size:21px;font-weight:600;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.cell dd small{font-size:12px;font-weight:400;color:var(--mute)}
+
+.pill{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;padding:3px 7px;border-radius:2px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.pill.neutral{background:var(--rule-soft);color:var(--mute)}
+
+/* parts */
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0}
+.toolbar input{flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--rule);
+  background:var(--panel);color:var(--ink);border-radius:2px;font-size:14px}
+.chip{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  padding:7px 11px;border:1px solid var(--rule);background:var(--panel);color:var(--mute);
+  cursor:pointer;border-radius:2px}
+.chip.on{background:var(--brass-bg);border-color:var(--brass);color:var(--brass)}
+
+.parts{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule)}
+.card{background:var(--panel);padding:13px 15px;cursor:pointer;display:flex;flex-direction:column;gap:5px}
+.card:hover{background:var(--panel2)}
+.card.sel{background:var(--brass-bg)}
+.card .r1{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.card .nm{font-weight:600;font-size:14.5px;line-height:1.25}
+.card .pr{font-family:ui-monospace,Menlo,monospace;font-size:13px;white-space:nowrap}
+.card .pn{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--mute);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card .dm{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--brass)}
+
+/* detail drawer */
+#detail{position:fixed;right:0;top:0;bottom:0;width:min(430px,92vw);background:var(--panel);
+  border-left:1px solid var(--rule);padding:24px 24px 40px;overflow-y:auto;z-index:40;
+  transform:translateX(101%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+  box-shadow:-18px 0 40px -30px rgba(0,0,0,.6)}
+#detail.open{transform:none}
+#detail h3{margin:0 0 2px;font-size:21px;letter-spacing:-.015em}
+#detail .pn2{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--mute);margin-bottom:16px}
+#detail dl{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin:16px 0;font-size:13.5px}
+#detail dt{font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--mute);padding-top:3px}
+#detail dd{margin:0;color:var(--ink-2)}
+#close{position:absolute;right:16px;top:14px;border:1px solid var(--rule);background:var(--paper);
+  color:var(--mute);cursor:pointer;border-radius:2px;padding:5px 9px;font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.buy{display:inline-block;margin-top:14px;padding:10px 16px;background:var(--ink);color:var(--paper);
+  text-decoration:none;font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;border-radius:2px}
+.why{background:var(--panel2);border-left:2px solid var(--brass);padding:11px 14px;margin:14px 0;
+  font-size:13.5px;color:var(--ink-2)}
+
+/* tables */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:520px;margin:16px 0}
+th{text-align:left;font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--mute);font-weight:400;padding:0 12px 8px 0;
+  border-bottom:1px solid var(--rule)}
+td{padding:11px 12px 11px 0;border-bottom:1px solid var(--rule-soft);color:var(--ink-2);vertical-align:top}
+td:first-child{color:var(--ink);font-weight:600}
+td.num{font-family:ui-monospace,Menlo,monospace;text-align:right;font-variant-numeric:tabular-nums}
+
+/* stack bar */
+.stack{display:flex;height:54px;border:1px solid var(--rule);margin:16px 0 6px;overflow:hidden}
+.stack div{display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;
+  font-size:10px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5);border-right:1px solid rgba(0,0,0,.18)}
+.stack div:last-child{border-right:0}
+
+/* 3d */
+#stage{position:relative;height:400px;border:1px solid var(--rule);
+  background:radial-gradient(ellipse at 50% 40%,var(--stage-a),var(--stage-b));
+  overflow:hidden;cursor:grab;touch-action:none;user-select:none;margin-top:16px}
+#stage.drag{cursor:grabbing}
+#world{position:absolute;left:50%;top:50%;width:0;height:0;transform-style:preserve-3d}
+.box{position:absolute;transform-style:preserve-3d;transition:transform .4s cubic-bezier(.4,0,.2,1)}
+.face{position:absolute;left:0;top:0;transform-origin:0 0;border:.5px solid rgba(0,0,0,.25)}
+.box.dim .face{opacity:.15}.box.hi .face{outline:1.5px solid var(--brass)}
+.box.hide{display:none}
+.ctls{display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:12px 14px;
+  border:1px solid var(--rule);border-top:0;background:var(--panel)}
+.ctls label{font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--mute)}
+input[type=range]{width:110px;accent-color:var(--brass)}
+
+.risk{border:1px solid var(--rule);background:var(--panel);padding:16px 18px;margin:14px 0}
+.risk h4{margin:0 0 4px;font-size:16px;display:flex;gap:10px;align-items:center}
+.risk p{margin:6px 0 0;font-size:14px}
+.risk .fix{margin-top:10px;padding-top:10px;border-top:1px dashed var(--rule);font-size:13.5px}
+.risk .fix b{color:var(--ink)}
+
+footer{margin-top:50px;padding-top:16px;border-top:1px solid var(--rule);
+  font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--mute);
+  display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){.box,#detail{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div>
+    <p class="sub">Build console · design locked</p>
+    <h1>The Bar</h1>
+  </div>
+  <div class="locked mono">6.0 × 6.0 × 40.0 mm · 316L<br>rev C · 2026-08-05</div>
+</header>
+
+<nav>
+  <button class="on" data-tab="verdict">Verdict</button>
+  <button data-tab="parts">Parts &amp; cost</button>
+  <button data-tab="fit">Does it fit</button>
+  <button data-tab="view">3D</button>
+  <button data-tab="risk">Deal breakers</button>
+</nav>
+
+<!-- ============ VERDICT ============ -->
+<section class="tab on" id="t-verdict">
+  <h2>Does it work</h2>
+  <p><strong>Yes — mechanically and electrically, with one unproven assumption.</strong> Everything fits inside 6 × 6 × 40 mm with 0.60 mm of spare height. Every part is a real orderable component, and the voltages agree. The one thing that cannot be settled on paper is whether Bluetooth escapes a metal tube, and that costs about $60 to test.</p>
+
+  <dl class="grid g4">
+    <div class="cell"><dt>Size</dt><dd>6×6×40<small> mm</small></dd></div>
+    <div class="cell"><dt>Battery</dt><dd>26<small> mAh</small></dd></div>
+    <div class="cell"><dt>Talk time</dt><dd>1.6–5.2<small> h</small></dd></div>
+    <div class="cell"><dt>Height spare</dt><dd>0.60<small> mm</small></dd></div>
+    <div class="cell"><dt>Parts on board</dt><dd>10</dd></div>
+    <div class="cell"><dt>Wires</dt><dd>0</dd></div>
+    <div class="cell"><dt>To test it</dt><dd>$60</dd></div>
+    <div class="cell"><dt>Unknowns</dt><dd>1</dd></div>
+  </dl>
+
+  <h2>What changed from the last version, and why it stops here</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Was</th><th>Now</th><th>Because</th></tr></thead>
+    <tbody>
+      <tr><td>35 mm</td><td>40 mm</td><td>The battery needs a protection board, ~4 mm, which I had not budgeted.</td></tr>
+      <tr><td>Top-actuated switch</td><td>Side-actuated EVQ-P7</td><td>The old switch faced the wrong way — the pusher would have missed it entirely.</td></tr>
+      <tr><td>Battery thin step 2.6 mm</td><td>2.0 mm</td><td>The side switch is 1.65 mm tall, so the board must sit lower.</td></tr>
+      <tr><td>2 charge pads</td><td>4</td><td>Two pads leave no way to reprogram a sealed device.</td></tr>
+      <tr><td>4-layer board</td><td>6-layer HDI</td><td>0.3 mm ball pitch cannot be escaped on 4 layers.</td></tr>
+      <tr><td>&ldquo;3.7 hours&rdquo;</td><td>1.6–5.2 hours</td><td>An honest range. Shipping competitors draw 13 mA; my estimate was 6.</td></tr>
+    </tbody>
+  </table></div>
+  <p>These are the last changes. Every dimension on this page is now consistent across the parts list, the fit maths and the 3D model.</p>
+
+  <h2>How it works, end to end</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Step</th><th>What happens</th><th>Cost</th></tr></thead>
+    <tbody>
+      <tr><td>Idle</td><td>Chip asleep, radio off, button drawing nothing at all.</td><td class="num">~2 µA</td></tr>
+      <tr><td>Double-click</td><td>Switch wakes the chip in under a millisecond. Tip glows.</td><td class="num">—</td></tr>
+      <tr><td>Talking</td><td>Mic → chip → Opus compression → written to flash.</td><td class="num">4–13 mA</td></tr>
+      <tr><td>Click again</td><td>Recording closes, glow stops.</td><td class="num">—</td></tr>
+      <tr><td>Sync</td><td>Bluetooth pushes the file to your phone, then erases it locally.</td><td class="num">~0.4 mA</td></tr>
+      <tr><td>Phone</td><td>Transcribes on-device, cleans it up, files it.</td><td class="num">free</td></tr>
+      <tr><td>Night</td><td>Chain off, drop on the dock, 4 pads charge it.</td><td class="num">20 mA</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ PARTS ============ -->
+<section class="tab" id="t-parts">
+  <h2>Every part <span></span></h2>
+  <p>Click any part for full specs, why it's there, what it connects to, and where to buy it.</p>
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="Search parts…" aria-label="Search parts">
+    <button class="chip on" data-f="all">All</button>
+    <button class="chip" data-f="proto">Buy now</button>
+    <button class="chip" data-f="prod">Production</button>
+    <button class="chip" data-f="mech">Physical</button>
+  </div>
+  <dl class="grid g4">
+    <div class="cell"><dt>Buy-now cart</dt><dd id="c-proto">—</dd></div>
+    <div class="cell"><dt>Production, per unit</dt><dd id="c-prod">—</dd></div>
+    <div class="cell"><dt>Parts shown</dt><dd id="c-count">—</dd></div>
+    <div class="cell"><dt>Needs a quote</dt><dd id="c-quote">—</dd></div>
+  </dl>
+  <div class="parts" id="parts"></div>
+</section>
+
+<!-- ============ FIT ============ -->
+<section class="tab" id="t-fit">
+  <h2>Height — the tight one</h2>
+  <p>Everything inside stacks vertically. This is what decides whether the product is possible, and it is why 5 mm was abandoned.</p>
+  <div class="stack" id="stackbar"></div>
+  <p class="mono" style="font-size:12px;color:var(--mute)">4.80 mm used · 5.40 mm cavity · <span style="color:var(--ok)">0.60 mm spare</span></p>
+  <div class="tw"><table>
+    <thead><tr><th>Layer</th><th class="num">mm</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td>Battery, thin step</td><td class="num">2.00</td><td>Reduced from 2.6 to make room for the switch</td></tr>
+      <tr><td>Parts under the board</td><td class="num">0.55</td><td>Chip, flash, charger, crystal</td></tr>
+      <tr><td>Circuit board</td><td class="num">0.60</td><td>6-layer HDI rigid-flex</td></tr>
+      <tr><td>Button switch</td><td class="num">1.65</td><td>Tallest thing in the device — it sets the limit</td></tr>
+      <tr><td><strong>Total</strong></td><td class="num"><strong>4.80</strong></td><td>Cavity is 5.40 → <span class="pill ok">0.60 spare</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>Length</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Zone</th><th class="num">From</th><th class="num">To</th><th class="num">mm</th></tr></thead>
+    <tbody>
+      <tr><td>Top cap + chain loop</td><td class="num">0.0</td><td class="num">2.5</td><td class="num">2.5</td></tr>
+      <tr><td>Battery protection board</td><td class="num">2.5</td><td class="num">6.5</td><td class="num">4.0</td></tr>
+      <tr><td>Battery, thick step</td><td class="num">6.5</td><td class="num">19.0</td><td class="num">12.5</td></tr>
+      <tr><td>Circuit board over thin battery</td><td class="num">19.0</td><td class="num">35.0</td><td class="num">16.0</td></tr>
+      <tr><td>Black tip — antenna + light</td><td class="num">35.0</td><td class="num">40.0</td><td class="num">5.0</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>Width</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Check</th><th class="num">Needs</th><th class="num">Has</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>Switch across the board</td><td class="num">2.90</td><td class="num">3.60</td><td><span class="pill ok">0.70 spare</span></td></tr>
+      <tr><td>Microphone across the board</td><td class="num">2.65</td><td class="num">3.60</td><td><span class="pill ok">0.95 spare</span></td></tr>
+      <tr><td>Board inside the cavity</td><td class="num">3.60</td><td class="num">5.40</td><td><span class="pill ok">1.80 spare</span></td></tr>
+      <tr><td>Battery inside the cavity</td><td class="num">4.80</td><td class="num">5.40</td><td><span class="pill ok">0.60 spare</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>Electrical compatibility</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Check</th><th>Result</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>Battery 4.2 V vs chip max 3.6 V</td><td>nPM1100 regulates down to 3.0 V</td><td><span class="pill ok">solved</span></td></tr>
+      <tr><td>Chip, mic and flash on one rail</td><td>all three run at 3.0 V</td><td><span class="pill ok">agree</span></td></tr>
+      <tr><td>Flash voltage variant</td><td>must be the "JV" 3.3 V part, not "JW"</td><td><span class="pill warn">verify package</span></td></tr>
+      <tr><td>Mic to chip</td><td>digital PDM — direct, no audio chip</td><td><span class="pill ok">native</span></td></tr>
+      <tr><td>Flash to chip</td><td>SPI — direct</td><td><span class="pill ok">native</span></td></tr>
+      <tr><td>Crystal load capacitors</td><td>built into the chip — 2 parts saved</td><td><span class="pill ok">native</span></td></tr>
+      <tr><td>Charge current 20 mA on a 26 mAh cell</td><td>0.77C — high but usually acceptable</td><td><span class="pill warn">confirm with cell</span></td></tr>
+      <tr><td>Programming after assembly</td><td>4 pads carry power + SWD</td><td><span class="pill ok">solved</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ 3D ============ -->
+<section class="tab" id="t-view">
+  <h2>The object</h2>
+  <p>Drag to rotate, scroll to zoom. Every block is a real part at its real size and position.</p>
+  <div id="stage"><div id="world"></div></div>
+  <div class="ctls">
+    <label for="ex">Explode</label><input id="ex" type="range" min="0" max="100" value="0">
+    <label for="zm">Zoom</label><input id="zm" type="range" min="6" max="30" value="14">
+    <button class="chip on" id="bcase">Case on</button>
+    <button class="chip on" id="bspin">Spin</button>
+  </div>
+</section>
+
+<!-- ============ RISK ============ -->
+<section class="tab" id="t-risk">
+  <h2>What can kill this</h2>
+  <p>Ranked by how likely they are to end the project, not by how hard they are to fix.</p>
+
+  <div class="risk">
+    <h4><span class="pill bad">unproven</span> Bluetooth may not escape the metal</h4>
+    <p>A sealed metal tube attenuates 2.4 GHz by roughly 6 dB per millimetre. The design puts a chip antenna in a 5 mm non-metal tip with the 35 mm steel body acting as its counterpoise — which is sound theory, and 35 mm is a good length for it. But it is unproven in this exact geometry and no calculation settles it.</p>
+    <div class="fix"><b>Test:</b> feed a split tube from an nRF52840 module with a u.FL connector over thin coax and measure signal strength across a room. <b>$60, one evening.</b> If it fails, the product becomes plastic or ceramic and the whole look changes.</div>
+  </div>
+
+  <div class="risk">
+    <h4><span class="pill warn">likely</span> Talk time could be 1.6 hours, not 5</h4>
+    <p>Everything depends on how much current the firmware actually draws while recording. My estimate is 4–6 mA. Shipping competitors — Plaud, Omi — draw 11–16 mA. At 13 mA this device gives 1.6 hours per charge rather than 5.2.</p>
+    <div class="fix"><b>Test:</b> measure it on the dev board in Phase 1, before committing to a cell size. Still a usable product at 1.6 h — but know the number before you promise it.</div>
+  </div>
+
+  <div class="risk">
+    <h4><span class="pill warn">open</span> The custom battery may not be quotable at low volume</h4>
+    <p>The stepped cell is the only true custom part. Shaped-cell suppliers quote samples readily but production minimums can be thousands of units. If the minimum is unaffordable, the fallback is a plain flat cell, which costs about 6 mAh — roughly 45 minutes of talking.</p>
+    <div class="fix"><b>Do today:</b> email Grepow. It costs nothing and it is the longest lead item in the project. Ask specifically whether the protection board can fold beside the cell rather than in line with it — that would win back 4 mm of length.</div>
+  </div>
+
+  <div class="risk">
+    <h4><span class="pill warn">open</span> The 0.3 mm ball-pitch chip is hard to manufacture</h4>
+    <p>The nRF54L15 in its smallest package needs a 6-layer HDI board with laser-drilled vias, and machine assembly. No hand soldering, no cheap prototype board service.</p>
+    <div class="fix"><b>Mitigation:</b> JLCPCB fabricates and assembles this class of board affordably. Expect roughly $600 for a first run of five, not the $200 a simple board would cost.</div>
+  </div>
+
+  <div class="risk">
+    <h4><span class="pill neutral">watch</span> Chain noise into the microphone</h4>
+    <p>A metal bar on a metal chain behaves as a contact microphone. Every link tick can be louder than your voice.</p>
+    <div class="fix"><b>Mitigation:</b> suspend the mic in a silicone boot so it never touches the shell, and offer a leather cord — quieter, and a second look rather than a compromise.</div>
+  </div>
+
+  <h2>The order to do things</h2>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Do</th><th class="num">Cost</th><th>Answers</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Email Grepow for a stepped-cell quote</td><td class="num">$0</td><td>Is the battery obtainable?</td></tr>
+      <tr><td>2</td><td>Build the antenna test rig</td><td class="num">$60</td><td>Does Bluetooth escape? <em>The big one.</em></td></tr>
+      <tr><td>3</td><td>Dev board + button, measure current</td><td class="num">$40</td><td>Real talk time</td></tr>
+      <tr><td>4</td><td>Wear an ugly version on a chain for a month</td><td class="num">$20</td><td>Do you actually reach for it?</td></tr>
+      <tr><td>5</td><td>Custom board</td><td class="num">$600</td><td>—</td></tr>
+      <tr><td>6</td><td>Steel bodies and finishing</td><td class="num">$2,500</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+  <p><strong>Steps 1–4 cost $120 and answer everything that matters.</strong> Nothing beyond step 4 should be spent until those four are done.</p>
+</section>
+
+<footer>
+  <span>The Bar · build console · rev C locked</span>
+  <span>serve: python3 -m http.server 8765</span>
+</footer>
+</div>
+
+<aside id="detail" aria-label="Part detail">
+  <button id="close">esc</button>
+  <h3 id="d-name"></h3>
+  <div class="pn2" id="d-pn"></div>
+  <div id="d-badges"></div>
+  <div class="why" id="d-why"></div>
+  <dl>
+    <dt>Size</dt><dd id="d-size"></dd>
+    <dt>Price</dt><dd id="d-price"></dd>
+    <dt>Where</dt><dd id="d-src"></dd>
+    <dt>Connects to</dt><dd id="d-conn"></dd>
+    <dt>Runs at</dt><dd id="d-volt"></dd>
+    <dt>Position</dt><dd id="d-pos"></dd>
+  </dl>
+  <div id="d-note"></div>
+  <a class="buy" id="d-link" href="#" target="_blank" rel="noopener">Open supplier ↗</a>
+</aside>
+
+<script>
+(function(){
+"use strict";
+const PARTS=[
+ {id:"soc",n:"nRF54L15",pn:"NRF54L15-CAAA-R",grp:"prod",price:5.20,qty:1,
+  size:"2.45 × 2.25 × 0.50 mm",src:"Digi-Key / Mouser",
+  link:"https://www.digikey.com/en/products/detail/nordic-semiconductor-asa/NRF54L15-CAAA-R",
+  volt:"1.7 – 3.6 V (run at 3.0)",conn:"microphone, flash, switch, LED, antenna, crystal",
+  pos:"under the board, 19.4 mm down",
+  why:"The brain and the Bluetooth radio in one chip. Everything else in the device exists to feed it or be driven by it.",
+  note:"Chosen because it is the only capable chip small enough — the popular nRF52840 is 3.5 mm wide and will not fit a 3.6 mm board. Its 0.3 mm ball pitch is what forces a 6-layer HDI board.",
+  x:19.4,w:2.25,y:0.15,h:0.50,z:0,d:2.45,c:"#131313"},
+
+ {id:"pmic",n:"Power manager",pn:"NPM1100-CAAA-R",grp:"prod",price:0.91,qty:1,
+  size:"2.10 × 2.10 mm",src:"LCSC / Digi-Key",
+  link:"https://www.lcsc.com/product-detail/Battery-Management-ICs_Nordic-Semicon-NPM1100-CAAA-R_C3682247.html",
+  volt:"in 4.2 V, out 3.0 V",conn:"battery, charge pads, everything else",
+  pos:"under the board, 25.0 mm down",
+  why:"Charges the battery safely and steps its voltage down to something the chip can survive.",
+  note:"This part fixed a genuine design error. A lithium cell charges to 4.2 V; the main chip's absolute maximum is 3.6 V. Running it directly off the battery would destroy it on the first full charge.",
+  x:25.0,w:0.9,y:0.15,h:0.50,z:0,d:1.6,c:"#1B1B1B"},
+
+ {id:"mic",n:"Microphone",pn:"TDK InvenSense T5837",grp:"prod",price:1.60,qty:1,
+  size:"3.50 × 2.65 × 0.98 mm",src:"Digi-Key / Mouser",
+  link:"https://invensense.tdk.com/products/digital/t5837/",
+  volt:"1.6 – 3.6 V",conn:"chip, 2 data lines",pos:"on top of the board, 19.4 mm down",
+  why:"Picks up your voice. Digital, so it sends numbers straight to the chip — no separate audio chip needed.",
+  note:"Bonded directly behind the hole in the case. Any air gap between the mic and the hole becomes a resonator that wrecks the speech frequencies.",
+  x:19.4,w:3.5,y:1.05,h:0.98,z:0,d:2.65,c:"#2B2B2B"},
+
+ {id:"sw",n:"Button switch",pn:"Panasonic EVQ-P7 (side actuated)",grp:"prod",price:0.35,qty:1,
+  size:"3.50 × 2.90 × 1.65 mm",src:"Digi-Key / Newark",
+  link:"https://industry.panasonic.com/global/en/products/control/switch/light-touch/3529m_smd_side",
+  volt:"—",conn:"chip, 1 line",pos:"on top of the board, 24.0 mm down",
+  why:"The button. Side-actuated, so its plunger points out through the side of the bar while the board stays flat.",
+  note:"This part fixed the second real error. The switch I had before faced the front while the pusher came in from the side — perpendicular, so it would never have been pressed. At 1.65 mm it is now the tallest thing inside, and it is why the battery's thin step dropped to 2.0 mm.",
+  x:24.0,w:1.6,y:1.05,h:1.65,z:0,d:2.9,c:"#171717"},
+
+ {id:"flash",n:"Flash memory",pn:"Winbond W25Q128JV (WLCSP)",grp:"prod",price:1.40,qty:1,
+  size:"2.50 × 2.50 × 0.33 mm",src:"Digi-Key / LCSC",link:"https://www.winbond.com/hq/product/code-storage-flash-memory/",
+  volt:"2.7 – 3.6 V",conn:"chip, 4 lines (SPI)",pos:"under the board, 22.0 mm down",
+  why:"Holds your recordings until the phone collects them. 16 MB is about two hours of compressed speech.",
+  note:"Must be the JV version. The nearly identically named JW is a 1.8 V part and would be destroyed instantly on a 3.0 V rail. Confirm it is available in the small WLCSP package before ordering.",
+  x:22.0,w:2.5,y:0.22,h:0.33,z:0,d:2.5,c:"#1B1B1B"},
+
+ {id:"xtal",n:"32 MHz crystal",pn:"NDK NX1612SA-32MHZ",grp:"prod",price:0.45,qty:1,
+  size:"1.60 × 1.20 × 0.35 mm",src:"JLCPCB C1986486",
+  link:"https://jlcpcb.com/partdetail/NDK-NX1612SA_32MHZ_EXS00ACS09166/C1986486",
+  volt:"—",conn:"chip, 2 lines",pos:"under the board, 26.5 mm down",
+  why:"A precise metronome for the radio. Without it Bluetooth cannot keep time well enough for the phone to understand it.",
+  note:"No load capacitors needed — the nRF54L15 has them built in and settable in software. Two fewer parts.",
+  x:26.5,w:1.2,y:0.22,h:0.35,z:0,d:1.6,c:"#9B8D5B"},
+
+ {id:"ant",n:"Antenna",pn:"Johanson 2450AT18A100E",grp:"prod",price:0.75,qty:1,
+  size:"3.20 × 1.60 × 1.30 mm",src:"Digi-Key / Mouser",
+  link:"https://www.johansontechnology.com/antennas",
+  volt:"—",conn:"chip, through the matching network",pos:"inside the black tip, 37 mm down",
+  why:"Radiates the Bluetooth signal. It has to sit in the non-metal tip, because metal blocks radio.",
+  note:"Whether this works in this geometry is the single unproven assumption in the whole design.",
+  x:37.0,w:1.6,y:0,h:1.3,z:0,d:3.2,c:"#D8D8D8"},
+
+ {id:"led",n:"Indicator LED",pn:"0402 side-fire",grp:"prod",price:0.12,qty:1,
+  size:"1.00 × 0.50 × 0.45 mm",src:"LCSC / Digi-Key",link:"https://www.lcsc.com/products/LED_337.html",
+  volt:"3.0 V",conn:"chip, 1 line",pos:"on top of the board, 34 mm down",
+  why:"Lights the black tip while recording, so the whole ring glows.",
+  note:"Costs nothing and needs no extra hole, because the tip is already a non-metal window for the antenna.",
+  x:34.0,w:0.5,y:1.05,h:0.45,z:0,d:1,c:"#C1502E"},
+
+ {id:"pass",n:"Passives",pn:"9 × 0201 + 0402 inductor",grp:"prod",price:0.40,qty:1,
+  size:"0.60 × 0.30 mm each",src:"LCSC",link:"https://www.lcsc.com/",
+  volt:"—",conn:"power rails and the radio",pos:"under the board, 28–31 mm down",
+  why:"Tiny capacitors and resistors that steady the power supply and tune the radio.",
+  note:"Unglamorous and unavoidable. Every circuit has them.",
+  x:29.0,w:2.3,y:0.22,h:0.40,z:0,d:3,c:"#3B3B3B"},
+
+ {id:"pcb",n:"Circuit board",pn:"6-layer HDI rigid-flex",grp:"prod",price:22.00,qty:1,
+  size:"3.60 × 16.0 × 0.60 mm",src:"JLCPCB",link:"https://jlcpcb.com/",
+  volt:"—",conn:"everything — it IS the wiring",pos:"19 to 35 mm down",
+  why:"Not really a part. Copper lines printed inside it connect every component to every other one. This is why the device has no wires and no connectors.",
+  note:"Needs laser-drilled vias because of the chip's 0.3 mm ball pitch. Priced per unit in a small run; far cheaper at volume.",
+  x:19,w:16,y:0.75,h:0.6,z:0,d:3.6,c:"#17593A"},
+
+ {id:"cell",n:"Battery",pn:"Grepow custom stepped pouch",grp:"prod",price:9.00,qty:1,quote:true,
+  size:"4.8 wide · 2.0 / 4.6 thick · 28.5 long",src:"Grepow — quote required",
+  link:"https://www.grepow.com/shaped-battery/pouch-stepped-lipo-battery.html",
+  volt:"3.7 V nominal, 4.2 V charged",conn:"power manager",pos:"6.5 to 35 mm down",
+  why:"26 mAh. The entire energy budget, and only enough because the device records solely while you hold the button.",
+  note:"The only genuinely custom part and the longest lead item. The step lets it be thick where there is no board above it and thin where the board sits — worth about 6 mAh over a plain flat cell.",
+  x:6.5,w:12.5,y:0,h:4.6,z:0,d:4.8,c:"#8A6236"},
+
+ {id:"pcm",n:"Battery protection",pn:"integrated with the cell",grp:"prod",price:0,qty:1,
+  size:"~4 mm of length",src:"included in the cell quote",link:"https://www.grepow.com/",
+  volt:"—",conn:"battery tabs",pos:"2.5 to 6.5 mm down",
+  why:"Stops the cell being over-discharged, over-charged or short-circuited. Legally and practically mandatory.",
+  note:"This was missing from every earlier version of this design and is why the bar grew from 35 mm to 40 mm. Ask whether it can fold beside the cell instead of in line with it — that would win the 4 mm back.",
+  x:2.5,w:4,y:0,h:4.6,z:0,d:4.8,c:"#6E5230"},
+
+ // ---------- physical ----------
+ {id:"tube",n:"Steel tube",pn:"316L square, 6 × 6, 0.3 wall",grp:"mech",price:6.00,qty:1,
+  size:"6 × 6 × 32.5 mm",src:"McMaster-Carr / Online Metals",link:"https://www.mcmaster.com/products/stainless-steel-tubing/",
+  volt:"—",conn:"—",pos:"the body",
+  why:"The body of the product, and the counterpoise the antenna works against.",
+  note:"Bought as drawn tube rather than machined from solid. This is the single biggest cost saving in the build — 0.3 mm walls are catalogue stock but a specialist machining job.",
+  x:2.5,w:32.5,y:0,h:6,z:0,d:6,c:"#B4BEC4",shell:true},
+
+ {id:"cap",n:"Top cap + chain loop",pn:"machined 316L",grp:"mech",price:8.00,qty:1,
+  size:"6 × 6 × 2.5 mm",src:"machine shop",link:"https://www.protolabs.com/",
+  volt:"—",conn:"the chain",pos:"0 to 2.5 mm",
+  why:"Solid metal that the chain hangs from.",
+  note:"Must be solid. A hole through a 0.3 mm tube wall is exactly where a yanked necklace tears.",
+  x:0,w:2.5,y:0,h:6,z:0,d:6,c:"#98A2A8"},
+
+ {id:"tip",n:"Black tip",pn:"translucent polymer or ceramic",grp:"mech",price:5.00,qty:1,
+  size:"6 × 6 × 5 mm",src:"custom moulded",link:"https://www.protolabs.com/",
+  volt:"—",conn:"bonded to the tube",pos:"35 to 40 mm",
+  why:"Three jobs in one part: it lets Bluetooth out, it glows when recording, and it is the black accent you wanted.",
+  note:"Must be non-metallic or the radio cannot escape. Translucent so the LED behind it lights the whole ring.",
+  x:35,w:5,y:0,h:6,z:0,d:6,c:"#242A2E"},
+
+ {id:"push",n:"Button pusher + O-ring",pn:"machined pin, Ø2.6",grp:"mech",price:4.00,qty:1,
+  size:"Ø2.6, 0.25 mm travel",src:"machine shop",link:"https://www.protolabs.com/",
+  volt:"—",conn:"presses the switch",pos:"side face, 24.8 mm down",
+  why:"What your thumb actually touches. The O-ring keeps water out while letting it slide.",
+  note:"A sealed metal skin cannot work as a button — 3 N of press moves 0.1 mm steel by only 7.6 µm, and a click needs 150–250. It has to be a real moving part.",
+  x:23.9,w:2.6,y:0,h:2.6,z:3.2,d:0.9,c:"#E6ECEF"},
+
+ {id:"vent",n:"Waterproof mic mesh",pn:"GORE GAW334",grp:"mech",price:1.20,qty:1,
+  size:"Ø1.6 mm",src:"Gore — sales enquiry",link:"https://www.gore.com/products/portable-electronics-acoustic-vents",
+  volt:"—",conn:"covers the mic hole",pos:"front face, 21 mm down",
+  why:"Sound passes through it, water does not. This is what makes the product showerproof.",
+  note:"Rated IP68 with under 2 dB of acoustic loss. Off-the-shelf.",
+  x:19.7,w:2.6,y:3.2,h:0.3,z:0,d:2.6,c:"#39424A"},
+
+ {id:"pads",n:"Charge pads",pn:"4 × Ø1.6 gold",grp:"mech",price:2.00,qty:1,
+  size:"Ø1.6 mm each",src:"plated onto the board",link:"https://jlcpcb.com/",
+  volt:"5 V from the dock",conn:"power manager, and the chip for programming",pos:"bottom of the tip",
+  why:"Charging, and reprogramming the device after it is sealed.",
+  note:"Four, not two. Two would leave a sealed device that can never be reflashed if its radio firmware breaks. Gold or rhodium plated, since sweat corrodes cheap plating.",
+  x:39.6,w:0.4,y:0,h:1.6,z:0,d:4,c:"#C9A227"},
+
+ // ---------- prototype ----------
+ {id:"xiao",n:"Seeed XIAO nRF52840 Sense",pn:"dev board",grp:"proto",price:20,qty:1,
+  size:"21 × 17.5 mm",src:"Seeed / Digi-Key / Amazon",
+  link:"https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html",
+  volt:"USB or LiPo",conn:"—",pos:"prototype only",
+  why:"Bluetooth chip, microphone and battery charging already on one board. This is your entire Phase 1 prototype.",
+  note:"It cannot be used for the antenna test — at 21 × 17.5 mm it is three times too wide to fit inside a 6 mm tube. Use the u.FL module below for that.",
+  x:0,w:0,y:0,h:0,z:0,d:0,c:"#444"},
+
+ {id:"ufl",n:"nRF52840 module with u.FL",pn:"Fanstel BT840E / Raytac MDBT50Q-RX",grp:"proto",price:14,qty:2,
+  size:"—",src:"Digi-Key / Mouser / Tindie",link:"https://www.fanstel.com/bt840",
+  volt:"3.3 V",conn:"coax to the test tube",pos:"prototype only",
+  why:"The antenna test needs a board with an external antenna socket, so a thin coax cable can feed the metal tube from outside.",
+  note:"Buy two — one transmits from inside the tube, the other receives across the room so you can measure the loss.",
+  x:0,w:0,y:0,h:0,z:0,d:0,c:"#444"},
+
+ {id:"ksq",n:"K&S 6 mm square tube",pn:"brass or aluminium",grp:"proto",price:8,qty:1,
+  size:"6 × 6 mm",src:"hobby shop / Amazon",link:"https://www.amazon.com/s?k=K%26S+precision+metals+square+tube+6mm",
+  volt:"—",conn:"—",pos:"prototype only",
+  why:"The test enclosure. Brass behaves like steel for radio purposes and is far easier to cut by hand.",
+  note:"Buy the antenna-test parts first. Everything else in the project waits on that result.",
+  x:0,w:0,y:0,h:0,z:0,d:0,c:"#444"},
+
+ {id:"ptfe",n:"PTFE rod, 6 mm",pn:"insulating spacer",grp:"proto",price:8,qty:1,
+  size:"Ø6 mm",src:"Amazon / McMaster",link:"https://www.mcmaster.com/ptfe-rods/",
+  volt:"—",conn:"—",pos:"prototype only",
+  why:"The insulating gap that turns the metal tube into an antenna instead of a cage.",
+  note:"Any non-metal will do for the test — PTFE, nylon, even a slice of wooden dowel.",
+  x:0,w:0,y:0,h:0,z:0,d:0,c:"#444"},
+
+ {id:"coax",n:"Thin coax + connectors",pn:"RG-178 / 1.13 mm u.FL pigtails",grp:"proto",price:12,qty:1,
+  size:"—",src:"Amazon / Digi-Key",link:"https://www.digikey.com/en/products/filter/coaxial-cables/456",
+  volt:"—",conn:"module to tube",pos:"prototype only",
+  why:"Carries the radio signal from the module into the metal tube.",
+  note:"Get u.FL pigtails so nothing needs to be soldered onto the module itself.",
+  x:0,w:0,y:0,h:0,z:0,d:0,c:"#444"},
+
+ {id:"cal",n:"Digital calipers",pn:"0.01 mm resolution",grp:"proto",price:25,qty:1,
+  size:"—",src:"Amazon",link:"https://www.amazon.com/s?k=digital+calipers",
+  volt:"—",conn:"—",pos:"your bench",
+  why:"Every number in this project is a fraction of a millimetre. You cannot work on it without measuring.",
+  note:"The single most useful $25 in the whole build.",
+  x:0,w:0,y:0,h:0,z:0,d:0,c:"#444"},
+
+ {id:"ref",n:"Reference pendant",pn:"Slim Bar, 40 × 4 mm",grp:"proto",price:40,qty:1,
+  size:"40 × 4 mm",src:"The Steel Shop",link:"https://www.thesteelshop.com/",
+  volt:"—",conn:"—",pos:"your neck",
+  why:"Hold the size in your hand before committing to 6 mm. This decision should be made physically.",
+  note:"It is 4 mm wide — noticeably thinner than this design. Worth knowing what you are giving up.",
+  x:0,w:0,y:0,h:0,z:0,d:0,c:"#444"},
+
+ {id:"lipo",n:"LiPo 100–150 mAh",pn:"prototype cell",grp:"proto",price:8,qty:1,
+  size:"—",src:"Adafruit / Amazon",link:"https://www.adafruit.com/category/574",
+  volt:"3.7 V",conn:"dev board",pos:"prototype only",
+  why:"Runs the prototype untethered so you can wear it and measure real current.",
+  note:"Bigger than the final cell — that is fine, it is for measuring, not for wearing well.",
+  x:0,w:0,y:0,h:0,z:0,d:0,c:"#444"},
+
+ {id:"swkit",n:"Tactile switch assortment",pn:"mixed sizes",grp:"proto",price:8,qty:1,
+  size:"—",src:"Amazon / Digi-Key",link:"https://www.digikey.com/en/products/filter/tactile-switches/180",
+  volt:"—",conn:"dev board",pos:"prototype only",
+  why:"You need to feel several before choosing. The click is most of what makes the product feel good.",
+  note:"Get side-actuated ones in the mix — that is what the final design uses.",
+  x:0,w:0,y:0,h:0,z:0,d:0,c:"#444"}
+];
+
+// ---------- tabs ----------
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.classList.remove("on"));
+  document.querySelectorAll("section.tab").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on");
+  document.getElementById("t-"+b.dataset.tab).classList.add("on");
+}));
+
+// ---------- parts list ----------
+const wrap=document.getElementById("parts"), q=document.getElementById("q");
+let filter="all";
+function money(n){return n===0?"incl.":"$"+n.toFixed(2)}
+function render(){
+  const term=q.value.trim().toLowerCase();
+  const list=PARTS.filter(p=>{
+    if(filter!=="all"&&p.grp!==filter)return false;
+    if(!term)return true;
+    return (p.n+" "+p.pn+" "+p.why).toLowerCase().includes(term);
+  });
+  wrap.innerHTML="";
+  list.forEach(p=>{
+    const el=document.createElement("div");
+    el.className="card"; el.dataset.id=p.id; el.tabIndex=0;
+    el.innerHTML=`<div class="r1"><span class="nm">${p.n}</span>
+      <span class="pr">${p.quote?"quote":money(p.price*p.qty)}</span></div>
+      <div class="pn">${p.pn}</div>
+      <div class="dm">${p.size}</div>`;
+    el.addEventListener("click",()=>open(p));
+    el.addEventListener("keydown",e=>{if(e.key==="Enter")open(p)});
+    wrap.appendChild(el);
+  });
+  const proto=PARTS.filter(p=>p.grp==="proto").reduce((s,p)=>s+p.price*p.qty,0);
+  const prod=PARTS.filter(p=>p.grp==="prod"||p.grp==="mech").reduce((s,p)=>s+p.price*p.qty,0);
+  document.getElementById("c-proto").innerHTML="$"+proto.toFixed(0);
+  document.getElementById("c-prod").innerHTML="$"+prod.toFixed(0)+"<small> at qty 5</small>";
+  document.getElementById("c-count").textContent=list.length;
+  document.getElementById("c-quote").textContent=PARTS.filter(p=>p.quote).length;
+}
+q.addEventListener("input",render);
+document.querySelectorAll(".chip[data-f]").forEach(c=>c.addEventListener("click",()=>{
+  document.querySelectorAll(".chip[data-f]").forEach(x=>x.classList.remove("on"));
+  c.classList.add("on"); filter=c.dataset.f; render();
+}));
+
+// ---------- detail ----------
+const dq=id=>document.getElementById(id), panel=dq("detail");
+function open(p){
+  dq("d-name").textContent=p.n;
+  dq("d-pn").textContent=p.pn;
+  dq("d-badges").innerHTML=
+    `<span class="pill ${p.grp==="proto"?"ok":p.grp==="mech"?"neutral":"warn"}">${
+      p.grp==="proto"?"buy now":p.grp==="mech"?"physical":"production"}</span>`+
+    (p.quote?' <span class="pill bad">needs a quote</span>':"");
+  dq("d-why").textContent=p.why;
+  dq("d-size").textContent=p.size;
+  dq("d-price").textContent=p.quote?"quote required":money(p.price)+(p.qty>1?" × "+p.qty:"");
+  dq("d-src").textContent=p.src;
+  dq("d-conn").textContent=p.conn;
+  dq("d-volt").textContent=p.volt;
+  dq("d-pos").textContent=p.pos;
+  dq("d-note").innerHTML=p.note?`<div class="why" style="border-left-color:var(--mute)">${p.note}</div>`:"";
+  dq("d-link").href=p.link;
+  panel.classList.add("open");
+  document.querySelectorAll(".card").forEach(c=>c.classList.toggle("sel",c.dataset.id===p.id));
+}
+dq("close").addEventListener("click",()=>panel.classList.remove("open"));
+document.addEventListener("keydown",e=>{if(e.key==="Escape")panel.classList.remove("open")});
+
+// ---------- stack bar ----------
+const SL=[["Battery",2.00,"#8A6236"],["Parts under board",0.55,"#1B1B1B"],
+          ["Board",0.60,"#17593A"],["Switch",1.65,"#171717"],["spare",0.60,"#7FB58F"]];
+const sb=document.getElementById("stackbar");
+SL.forEach(([n,v,c])=>{const d=document.createElement("div");
+  d.style.flex=v; d.style.background=c; d.textContent=v.toFixed(2); d.title=n+" "+v+" mm"; sb.appendChild(d);});
+
+// ---------- 3D ----------
+const P3=PARTS.filter(p=>p.w>0);
+const world=dq("world"), stage=dq("stage");
+let S=14,rx=-22,ry=-30,ex=0,showCase=true,spin=true,boxes={};
+const LEN=40;
+function shade(hex,f){const n=parseInt(hex.slice(1),16);let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+  r=Math.min(255,r*f)|0;g=Math.min(255,g*f)|0;b=Math.min(255,b*f)|0;return `rgb(${r},${g},${b})`}
+function build(){
+  world.innerHTML="";boxes={};
+  P3.forEach(p=>{
+    const w=p.w*S,h=p.h*S,d=p.d*S,b=document.createElement("div");
+    b.className="box";
+    const o=p.shell?0.28:1;
+    [[w,h,`translate3d(${-w/2}px,${-h/2}px,${d/2}px)`,1],
+     [w,h,`translate3d(${-w/2}px,${-h/2}px,${-d/2}px)`,.6],
+     [d,h,`translate3d(${w/2}px,${-h/2}px,${d/2}px) rotateY(90deg)`,.8],
+     [d,h,`translate3d(${-w/2}px,${-h/2}px,${-d/2}px) rotateY(90deg)`,.72],
+     [w,d,`translate3d(${-w/2}px,${-h/2}px,${-d/2}px) rotateX(90deg)`,1.18],
+     [w,d,`translate3d(${-w/2}px,${h/2}px,${-d/2}px) rotateX(90deg)`,.55]]
+    .forEach(f=>{const el=document.createElement("div");el.className="face";
+      el.style.cssText=`width:${f[0]}px;height:${f[1]}px;transform:${f[2]};background:${shade(p.c,f[3])};opacity:${o}`;
+      b.appendChild(el);});
+    world.appendChild(b);boxes[p.id]=b;
+  });
+  place();
+}
+function place(){
+  P3.forEach(p=>{
+    const b=boxes[p.id];if(!b)return;
+    const cx=(p.x+p.w/2-LEN/2)*S,cy=-p.y*S,cz=p.z*S;
+    const out=p.grp==="mech"?1:-1, k=ex*S*0.5;
+    b.style.transform=`translate3d(${cx}px,${cy-out*k*0.5}px,${cz+out*k*0.5}px)`;
+    b.classList.toggle("hide",p.grp==="mech"&&!showCase);
+  });
+}
+function frame(){world.style.transform=`rotateX(${rx}deg) rotateY(${ry}deg)`}
+stage.style.perspective="1400px";
+let down=false,lx=0,ly=0;
+stage.addEventListener("pointerdown",e=>{down=true;lx=e.clientX;ly=e.clientY;
+  stage.classList.add("drag");spin=false;dq("bspin").classList.remove("on");stage.setPointerCapture(e.pointerId)});
+stage.addEventListener("pointermove",e=>{if(!down)return;
+  ry+=(e.clientX-lx)*.4;rx=Math.max(-89,Math.min(89,rx-(e.clientY-ly)*.35));
+  lx=e.clientX;ly=e.clientY;frame()});
+["pointerup","pointercancel"].forEach(t=>stage.addEventListener(t,()=>{down=false;stage.classList.remove("drag")}));
+stage.addEventListener("wheel",e=>{e.preventDefault();
+  S=Math.max(6,Math.min(30,S-e.deltaY*.012));dq("zm").value=S;build();frame()},{passive:false});
+dq("ex").addEventListener("input",e=>{ex=+e.target.value/100*8;place()});
+dq("zm").addEventListener("input",e=>{S=+e.target.value;build();frame()});
+dq("bcase").addEventListener("click",e=>{showCase=!showCase;
+  e.target.classList.toggle("on",showCase);e.target.textContent=showCase?"Case on":"Case off";place()});
+dq("bspin").addEventListener("click",e=>{spin=!spin;e.target.classList.toggle("on",spin)});
+
+render();build();frame();
+if(matchMedia("(prefers-reduced-motion: reduce)").matches){spin=false;dq("bspin").classList.remove("on")}
+(function loop(){if(spin){ry+=.2;frame()}requestAnimationFrame(loop)})();
+})();
+</script>
+</body>
+</html>
